@@ -7,6 +7,12 @@ public class ServerOrderbook {
     public String venue;
     public String symbol;
 
+    public static ServerOrderbook failure() {
+        ServerOrderbook book = new ServerOrderbook();
+        book.ok = false;
+        return book;
+    }
+
     public static class Order {
         public int price;
         public int qty;

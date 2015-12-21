@@ -2,6 +2,7 @@ package com.oliverco;
 
 import com.google.gson.Gson;
 import org.apache.http.client.methods.CloseableHttpResponse;
+import org.apache.http.client.methods.HttpGet;
 import org.apache.http.client.methods.HttpPost;
 import org.apache.http.client.utils.URIBuilder;
 import org.apache.http.entity.StringEntity;
@@ -50,6 +51,27 @@ public class ClientWrapper {
         } else {
             System.out.println(response.getStatusLine());
             return ServerOrderStatus.failure();
+        }
+    }
+
+    public ServerOrderbook getOrderbook(String venue, String ticker) throws URISyntaxException, IOException {
+        URI getOrderbookUri = new URIBuilder().
+                setScheme("https").
+                setHost("api.stockfighter.io").
+                setPath(String.format("/ob/api/venues/%s/stocks/%s", venue, ticker)).
+                build();
+        HttpGet get = new HttpGet(getOrderbookUri);
+
+        get.setHeader("X-Starfighter-Authorization", apiKey);
+        CloseableHttpResponse response = httpClient.execute(get);
+
+        if(response.getStatusLine().getStatusCode() == 200) {
+            String textResponse = EntityUtils.toString(response.getEntity());
+            ServerOrderbook orderbook = gson.fromJson(textResponse, ServerOrderbook.class);
+            return orderbook;
+        } else {
+            System.out.println(response.getStatusLine());
+            return ServerOrderbook.failure();
         }
     }
 }

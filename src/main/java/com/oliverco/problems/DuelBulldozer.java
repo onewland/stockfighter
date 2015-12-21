@@ -1,6 +1,7 @@
 package com.oliverco.problems;
 
 import com.google.common.collect.Maps;
+import com.google.common.collect.Sets;
 import com.google.gson.Gson;
 import com.oliverco.*;
 import com.sun.deploy.Environment;
@@ -16,14 +17,14 @@ import java.io.IOException;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.HashMap;
+import java.util.Set;
 
 public class DuelBulldozer {
-    final String venue = "BGOCEX";
-    final String ticker = "RLH";
-    final String tradingAccount = "GWS29904072";
+    final String venue = "ULBEX";
+    final String ticker = "OJWO";
+    final String tradingAccount = "FMB34717574";
     final String apiKey = Environment.getenv("API_KEY");
-    private final HashMap<Integer, ServerOrderStatus> openBids = Maps.newHashMap();
-    private final HashMap<Integer, ServerOrderStatus> openAsks = Maps.newHashMap();
+    private final HashMap<Integer, ServerOrderStatus> openOrders = Maps.newHashMap();
     private int netShares = 0;
 
     public void execute(CloseableHttpClient httpClient) throws URISyntaxException, IOException, InterruptedException {
@@ -44,14 +45,6 @@ public class DuelBulldozer {
         sellOrderRequest.direction = "sell";
         sellOrderRequest.orderType = "limit";
 
-        URI getOrderbookUri = new URIBuilder().
-                setScheme("https").
-                setHost("api.stockfighter.io").
-                setPath(String.format("/ob/api/venues/%s/stocks/%s", venue, ticker)).
-                build();
-        HttpGet get = new HttpGet(getOrderbookUri);
-        get.setHeader("X-Starfighter-Authorization", apiKey);
-
         URI postOrderURI = new URIBuilder().
                 setScheme("https").
                 setHost("api.stockfighter.io").
@@ -62,12 +55,10 @@ public class DuelBulldozer {
 
         for(int i = 0; i < 500; i++) {
             System.out.println(netShares + " shares");
-            CloseableHttpResponse response1 = httpClient.execute(get);
-            System.out.println(response1.getStatusLine());
+            System.out.println(openOrders.size() + " open orders");
 
-            String responseStr = EntityUtils.toString(response1.getEntity());
+            ServerOrderbook serverOrderbook = httpWrapper.getOrderbook(venue, ticker);
 
-            ServerOrderbook serverOrderbook = gson.fromJson(responseStr, ServerOrderbook.class);
             if(serverOrderbook.asks != null &&
                 serverOrderbook.bids != null)
             {
@@ -83,7 +74,7 @@ public class DuelBulldozer {
                     buyOrderRequest.price = bidStats.getAvgOrder() + 10;
                     ServerOrderStatus result = httpWrapper.placeOrder(buyOrderRequest);
                     if(result.ok) {
-                        openBids.put(result.id, result);
+                        openOrders.put(result.id, result);
                     } else {
                         System.out.println("uhhh");
                     }
@@ -93,7 +84,7 @@ public class DuelBulldozer {
                     sellOrderRequest.price = askStats.getAvgOrder() - 10;
                     result = httpWrapper.placeOrder(sellOrderRequest);
                     if(result.ok) {
-                        openAsks.put(result.id, result);
+                        openOrders.put(result.id, result);
                     } else {
                         System.out.println("uhhh");
                     }
@@ -109,8 +100,9 @@ public class DuelBulldozer {
 
             netShares = 0;
 
-            // check on outstanding orders
-            for(ServerOrderStatus status : openBids.values()) {
+            Set<Integer> idsToRemove = Sets.newHashSet();
+
+            for(ServerOrderStatus status : openOrders.values()) {
                 URI getOrderStatusUri = new URIBuilder().
                         setScheme("https").
                         setHost("api.stockfighter.io").
@@ -119,30 +111,23 @@ public class DuelBulldozer {
                 HttpGet get2 = new HttpGet(getOrderStatusUri);
                 get2.setHeader("X-Starfighter-Authorization", apiKey);
                 CloseableHttpResponse get2Response = httpClient.execute(get2);
+
                 if(get2Response.getStatusLine().getStatusCode() == 200) {
                     String buyResponse = EntityUtils.toString(get2Response.getEntity());
                     ServerOrderStatus orderStatus = gson.fromJson(buyResponse, ServerOrderStatus.class);
-                    netShares += orderStatus.qty;
-                    openBids.put(orderStatus.id, orderStatus);
+                    if(orderStatus.direction.equals("buy")) {
+                        netShares += orderStatus.qty;
+                    } else if(orderStatus.direction.equals("sell")) {
+                        netShares -= orderStatus.qty;
+                    }
+                    openOrders.put(orderStatus.id, orderStatus);
+                    if(orderStatus.qty == orderStatus.totalFilled) {
+                        idsToRemove.add(orderStatus.id);
+                    }
                 }
             }
 
-            for(ServerOrderStatus status : openAsks.values()) {
-                URI getOrderStatusUri = new URIBuilder().
-                        setScheme("https").
-                        setHost("api.stockfighter.io").
-                        setPath(String.format("/ob/api/venues/%s/stocks/%s/orders/%d", venue, ticker, status.id)).
-                        build();
-                HttpGet get2 = new HttpGet(getOrderStatusUri);
-                get2.setHeader("X-Starfighter-Authorization", apiKey);
-                CloseableHttpResponse get2Response = httpClient.execute(get2);
-                if(get2Response.getStatusLine().getStatusCode() == 200) {
-                    String buyResponse = EntityUtils.toString(get2Response.getEntity());
-                    ServerOrderStatus orderStatus = gson.fromJson(buyResponse, ServerOrderStatus.class);
-                    netShares -= orderStatus.qty;
-                    openBids.put(orderStatus.id, orderStatus);
-                }
-            }
+            for(Integer id : idsToRemove) { openOrders.remove(id); }
         }
     }
 }
