@@ -2,19 +2,11 @@ package com.oliverco.problems;
 
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
-import com.google.gson.Gson;
 import com.oliverco.*;
 import com.sun.deploy.Environment;
-import org.apache.http.client.methods.CloseableHttpResponse;
-import org.apache.http.client.methods.HttpGet;
-import org.apache.http.client.methods.HttpPost;
-import org.apache.http.client.utils.URIBuilder;
-import org.apache.http.entity.StringEntity;
 import org.apache.http.impl.client.CloseableHttpClient;
-import org.apache.http.util.EntityUtils;
 
 import java.io.IOException;
-import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.HashMap;
 import java.util.Set;
@@ -29,7 +21,6 @@ public class DuelBulldozer {
 
     public void execute(CloseableHttpClient httpClient) throws URISyntaxException, IOException, InterruptedException {
         ClientWrapper httpWrapper = new ClientWrapper(httpClient, apiKey);
-        Gson gson = new Gson();
         int position = 0;
 
         OrderRequest buyOrderRequest = new OrderRequest();
@@ -45,14 +36,6 @@ public class DuelBulldozer {
         sellOrderRequest.stock = ticker;
         sellOrderRequest.direction = "sell";
         sellOrderRequest.orderType = "limit";
-
-        URI postOrderURI = new URIBuilder().
-                setScheme("https").
-                setHost("api.stockfighter.io").
-                setPath(String.format("/ob/api/venues/%s/stocks/%s/orders", venue, ticker)).
-                build();
-        HttpPost post = new HttpPost(postOrderURI);
-        post.setHeader("X-Starfighter-Authorization", apiKey);
 
         for(int i = 0; i < 500; i++) {
             System.out.println(netShares + " shares");
