@@ -2,11 +2,8 @@ package com.oliverco.problems;
 
 import com.google.common.collect.Maps;
 import com.google.gson.Gson;
-import com.oliverco.OrderRequest;
-import com.oliverco.OrderStatistics;
-import com.oliverco.ServerOrderStatus;
-import com.oliverco.ServerOrderbook;
-import org.apache.http.HttpEntity;
+import com.oliverco.*;
+import com.sun.deploy.Environment;
 import org.apache.http.client.methods.CloseableHttpResponse;
 import org.apache.http.client.methods.HttpGet;
 import org.apache.http.client.methods.HttpPost;
@@ -21,14 +18,16 @@ import java.net.URISyntaxException;
 import java.util.HashMap;
 
 public class DuelBulldozer {
-    final String venue = "RBSBEX";
-    final String ticker = "RYYA";
-    final String tradingAccount = "CCL7444232";
+    final String venue = "BGOCEX";
+    final String ticker = "RLH";
+    final String tradingAccount = "GWS29904072";
+    final String apiKey = Environment.getenv("API_KEY");
     private final HashMap<Integer, ServerOrderStatus> openBids = Maps.newHashMap();
     private final HashMap<Integer, ServerOrderStatus> openAsks = Maps.newHashMap();
     private int netShares = 0;
 
     public void execute(CloseableHttpClient httpClient) throws URISyntaxException, IOException, InterruptedException {
+        ClientWrapper httpWrapper = new ClientWrapper(httpClient, apiKey);
         Gson gson = new Gson();
 
         OrderRequest buyOrderRequest = new OrderRequest();
@@ -51,7 +50,7 @@ public class DuelBulldozer {
                 setPath(String.format("/ob/api/venues/%s/stocks/%s", venue, ticker)).
                 build();
         HttpGet get = new HttpGet(getOrderbookUri);
-        get.setHeader("X-Starfighter-Authorization","215ba92dd840fc8ddafad64ee5803149afc6a913");
+        get.setHeader("X-Starfighter-Authorization", apiKey);
 
         URI postOrderURI = new URIBuilder().
                 setScheme("https").
@@ -59,7 +58,7 @@ public class DuelBulldozer {
                 setPath(String.format("/ob/api/venues/%s/stocks/%s/orders", venue, ticker)).
                 build();
         HttpPost post = new HttpPost(postOrderURI);
-        post.setHeader("X-Starfighter-Authorization","215ba92dd840fc8ddafad64ee5803149afc6a913");
+        post.setHeader("X-Starfighter-Authorization", apiKey);
 
         for(int i = 0; i < 500; i++) {
             System.out.println(netShares + " shares");
@@ -79,43 +78,32 @@ public class DuelBulldozer {
                 System.out.println("bids: " + bidStats);
 
                 if(askStats.getAvgOrder() - bidStats.getAvgOrder() > 10) {
-                    // buy 10 cents above average bid, sell 10 cents below average ask
+                    // buy 10 cents above average bid
                     buyOrderRequest.qty = 100;
                     buyOrderRequest.price = bidStats.getAvgOrder() + 10;
-                    System.out.println(String.format(
-                            "[order] buy %d at %d",
-                            buyOrderRequest.qty,
-                            buyOrderRequest.price)
-                    );
-                    post.setEntity(new StringEntity(gson.toJson(buyOrderRequest)));
-                    CloseableHttpResponse postResponse = httpClient.execute(post);
-                    if(postResponse.getStatusLine().getStatusCode() == 200) {
-                        String buyResponse = EntityUtils.toString(postResponse.getEntity());
-                        ServerOrderStatus orderStatus = gson.fromJson(buyResponse, ServerOrderStatus.class);
-                        openBids.put(orderStatus.id, orderStatus);
+                    ServerOrderStatus result = httpWrapper.placeOrder(buyOrderRequest);
+                    if(result.ok) {
+                        openBids.put(result.id, result);
+                    } else {
+                        System.out.println("uhhh");
                     }
 
+                    // sell 10 cents below average ask
                     sellOrderRequest.qty = 100;
                     sellOrderRequest.price = askStats.getAvgOrder() - 10;
-                    System.out.println(String.format(
-                            "[order] sell %d at %d",
-                            sellOrderRequest.qty,
-                            sellOrderRequest.price)
-                    );
-                    post.setEntity(new StringEntity(gson.toJson(sellOrderRequest)));
-                    postResponse = httpClient.execute(post);
-                    if(postResponse.getStatusLine().getStatusCode() == 200) {
-                        String sellResponse = EntityUtils.toString(postResponse.getEntity());
-                        ServerOrderStatus orderStatus = gson.fromJson(sellResponse, ServerOrderStatus.class);
-                        openAsks.put(orderStatus.id, orderStatus);
+                    result = httpWrapper.placeOrder(sellOrderRequest);
+                    if(result.ok) {
+                        openAsks.put(result.id, result);
+                    } else {
+                        System.out.println("uhhh");
                     }
+
                 } else {
                     System.out.println("Spread too small, not bothering to trade");
                 }
             } else {
                 System.out.println("asks or bids were null, skipping iteration");
             }
-
 
             Thread.sleep(2000);
 
@@ -129,14 +117,13 @@ public class DuelBulldozer {
                         setPath(String.format("/ob/api/venues/%s/stocks/%s/orders/%d", venue, ticker, status.id)).
                         build();
                 HttpGet get2 = new HttpGet(getOrderStatusUri);
-                get2.setHeader("X-Starfighter-Authorization","215ba92dd840fc8ddafad64ee5803149afc6a913");
+                get2.setHeader("X-Starfighter-Authorization", apiKey);
                 CloseableHttpResponse get2Response = httpClient.execute(get2);
                 if(get2Response.getStatusLine().getStatusCode() == 200) {
                     String buyResponse = EntityUtils.toString(get2Response.getEntity());
                     ServerOrderStatus orderStatus = gson.fromJson(buyResponse, ServerOrderStatus.class);
                     netShares += orderStatus.qty;
                     openBids.put(orderStatus.id, orderStatus);
-                    System.out.println(buyResponse);
                 }
             }
 
@@ -147,14 +134,13 @@ public class DuelBulldozer {
                         setPath(String.format("/ob/api/venues/%s/stocks/%s/orders/%d", venue, ticker, status.id)).
                         build();
                 HttpGet get2 = new HttpGet(getOrderStatusUri);
-                get2.setHeader("X-Starfighter-Authorization","215ba92dd840fc8ddafad64ee5803149afc6a913");
+                get2.setHeader("X-Starfighter-Authorization", apiKey);
                 CloseableHttpResponse get2Response = httpClient.execute(get2);
                 if(get2Response.getStatusLine().getStatusCode() == 200) {
                     String buyResponse = EntityUtils.toString(get2Response.getEntity());
                     ServerOrderStatus orderStatus = gson.fromJson(buyResponse, ServerOrderStatus.class);
                     netShares -= orderStatus.qty;
                     openBids.put(orderStatus.id, orderStatus);
-                    System.out.println(buyResponse);
                 }
             }
         }

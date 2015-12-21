@@ -1,6 +1,12 @@
 package com.oliverco;
 
 public class ServerOrderStatus {
+    public static ServerOrderStatus failure() {
+        ServerOrderStatus status = new ServerOrderStatus();
+        status.ok = false;
+        return status;
+    }
+
     public static class Fill {
         public int price;
         public int qty;
