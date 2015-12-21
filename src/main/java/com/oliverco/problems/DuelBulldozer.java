@@ -59,7 +59,6 @@ public class DuelBulldozer {
             System.out.println(openOrders.size() + " open orders");
             System.out.println("position = " + position);
 
-
             ServerOrderbook serverOrderbook = httpWrapper.getOrderbook(venue, ticker);
 
             if(serverOrderbook.asks != null &&
@@ -111,36 +110,26 @@ public class DuelBulldozer {
             Set<Integer> idsToRemove = Sets.newHashSet();
 
             for(ServerOrderStatus status : openOrders.values()) {
-                URI getOrderStatusUri = new URIBuilder().
-                        setScheme("https").
-                        setHost("api.stockfighter.io").
-                        setPath(String.format("/ob/api/venues/%s/stocks/%s/orders/%d", venue, ticker, status.id)).
-                        build();
-                HttpGet get2 = new HttpGet(getOrderStatusUri);
-                get2.setHeader("X-Starfighter-Authorization", apiKey);
-                CloseableHttpResponse get2Response = httpClient.execute(get2);
+                ServerOrderStatus newOrderStatus = httpWrapper.getOrderStatus(venue, ticker, status.id);
 
-                if(get2Response.getStatusLine().getStatusCode() == 200) {
+                if(newOrderStatus.ok) {
                     int fillTotal = 0;
 
-                    String buyResponse = EntityUtils.toString(get2Response.getEntity());
-                    ServerOrderStatus orderStatus = gson.fromJson(buyResponse, ServerOrderStatus.class);
-
-                    for(ServerOrderStatus.Fill f: orderStatus.fills) {
+                    for(ServerOrderStatus.Fill f: newOrderStatus.fills) {
                         fillTotal += f.qty;
                     }
 
-                    if(orderStatus.direction.equals("buy")) {
-                        netShares += orderStatus.qty;
+                    if(newOrderStatus.direction.equals("buy")) {
+                        netShares += newOrderStatus.qty;
                         position += fillTotal;
-                    } else if(orderStatus.direction.equals("sell")) {
-                        netShares -= orderStatus.qty;
+                    } else if(newOrderStatus.direction.equals("sell")) {
+                        netShares -= newOrderStatus.qty;
                         position -= fillTotal;
                     }
 
-                    openOrders.put(orderStatus.id, orderStatus);
-                    if(orderStatus.qty == fillTotal || !orderStatus.open) {
-                        idsToRemove.add(orderStatus.id);
+                    openOrders.put(status.id, newOrderStatus);
+                    if(status.qty == fillTotal || !newOrderStatus.open) {
+                        idsToRemove.add(newOrderStatus.id);
                     }
                 }
             }

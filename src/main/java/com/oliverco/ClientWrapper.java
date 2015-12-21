@@ -74,4 +74,25 @@ public class ClientWrapper {
             return ServerOrderbook.failure();
         }
     }
+
+    public ServerOrderStatus getOrderStatus(String venue, String ticker, int id) throws URISyntaxException, IOException {
+        URI getOrderbookUri = new URIBuilder().
+                setScheme("https").
+                setHost("api.stockfighter.io").
+                setPath(String.format("/ob/api/venues/%s/stocks/%s/orders/%d", venue, ticker,id)).
+                build();
+        HttpGet get = new HttpGet(getOrderbookUri);
+
+        get.setHeader("X-Starfighter-Authorization", apiKey);
+        CloseableHttpResponse response = httpClient.execute(get);
+
+        if(response.getStatusLine().getStatusCode() == 200) {
+            String textResponse = EntityUtils.toString(response.getEntity());
+            ServerOrderStatus orderStatus = gson.fromJson(textResponse, ServerOrderStatus.class);
+            return orderStatus;
+        } else {
+            System.out.println(response.getStatusLine());
+            return ServerOrderStatus.failure();
+        }
+    }
 }
