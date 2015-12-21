@@ -20,9 +20,9 @@ import java.util.HashMap;
 import java.util.Set;
 
 public class DuelBulldozer {
-    final String venue = "ULBEX";
-    final String ticker = "OJWO";
-    final String tradingAccount = "FMB34717574";
+    final String venue = "KHJEX";
+    final String ticker = "EQXO";
+    final String tradingAccount = "HAI5175137";
     final String apiKey = Environment.getenv("API_KEY");
     private final HashMap<Integer, ServerOrderStatus> openOrders = Maps.newHashMap();
     private int netShares = 0;
@@ -30,6 +30,7 @@ public class DuelBulldozer {
     public void execute(CloseableHttpClient httpClient) throws URISyntaxException, IOException, InterruptedException {
         ClientWrapper httpWrapper = new ClientWrapper(httpClient, apiKey);
         Gson gson = new Gson();
+        int position = 0;
 
         OrderRequest buyOrderRequest = new OrderRequest();
         buyOrderRequest.account = tradingAccount;
@@ -56,6 +57,8 @@ public class DuelBulldozer {
         for(int i = 0; i < 500; i++) {
             System.out.println(netShares + " shares");
             System.out.println(openOrders.size() + " open orders");
+            System.out.println("position = " + position);
+
 
             ServerOrderbook serverOrderbook = httpWrapper.getOrderbook(venue, ticker);
 
@@ -69,24 +72,28 @@ public class DuelBulldozer {
                 System.out.println("bids: " + bidStats);
 
                 if(askStats.getAvgOrder() - bidStats.getAvgOrder() > 10) {
-                    // buy 10 cents above average bid
-                    buyOrderRequest.qty = 100;
-                    buyOrderRequest.price = bidStats.getAvgOrder() + 10;
-                    ServerOrderStatus result = httpWrapper.placeOrder(buyOrderRequest);
-                    if(result.ok) {
-                        openOrders.put(result.id, result);
-                    } else {
-                        System.out.println("uhhh");
+                    if(position < 300) {
+                        // buy 10 cents above average bid
+                        buyOrderRequest.qty = 100;
+                        buyOrderRequest.price = bidStats.getAvgOrder() + 10;
+                        ServerOrderStatus result = httpWrapper.placeOrder(buyOrderRequest);
+                        if (result.ok) {
+                            openOrders.put(result.id, result);
+                        } else {
+                            System.out.println("uhhh");
+                        }
                     }
 
-                    // sell 10 cents below average ask
-                    sellOrderRequest.qty = 100;
-                    sellOrderRequest.price = askStats.getAvgOrder() - 10;
-                    result = httpWrapper.placeOrder(sellOrderRequest);
-                    if(result.ok) {
-                        openOrders.put(result.id, result);
-                    } else {
-                        System.out.println("uhhh");
+                    if(position > -300) {
+                        // sell 10 cents below average ask
+                        sellOrderRequest.qty = 100;
+                        sellOrderRequest.price = askStats.getAvgOrder() - 10;
+                        ServerOrderStatus result = httpWrapper.placeOrder(sellOrderRequest);
+                        if (result.ok) {
+                            openOrders.put(result.id, result);
+                        } else {
+                            System.out.println("uhhh");
+                        }
                     }
 
                 } else {
@@ -96,9 +103,10 @@ public class DuelBulldozer {
                 System.out.println("asks or bids were null, skipping iteration");
             }
 
-            Thread.sleep(2000);
+            Thread.sleep(500);
 
             netShares = 0;
+            position = 0;
 
             Set<Integer> idsToRemove = Sets.newHashSet();
 
@@ -113,15 +121,25 @@ public class DuelBulldozer {
                 CloseableHttpResponse get2Response = httpClient.execute(get2);
 
                 if(get2Response.getStatusLine().getStatusCode() == 200) {
+                    int fillTotal = 0;
+
                     String buyResponse = EntityUtils.toString(get2Response.getEntity());
                     ServerOrderStatus orderStatus = gson.fromJson(buyResponse, ServerOrderStatus.class);
+
+                    for(ServerOrderStatus.Fill f: orderStatus.fills) {
+                        fillTotal += f.qty;
+                    }
+
                     if(orderStatus.direction.equals("buy")) {
                         netShares += orderStatus.qty;
+                        position += fillTotal;
                     } else if(orderStatus.direction.equals("sell")) {
                         netShares -= orderStatus.qty;
+                        position -= fillTotal;
                     }
+
                     openOrders.put(orderStatus.id, orderStatus);
-                    if(orderStatus.qty == orderStatus.totalFilled) {
+                    if(orderStatus.qty == fillTotal || !orderStatus.open) {
                         idsToRemove.add(orderStatus.id);
                     }
                 }

@@ -1,5 +1,7 @@
 package com.oliverco;
 
+import java.util.List;
+
 public class ServerOrderStatus {
     public static ServerOrderStatus failure() {
         ServerOrderStatus status = new ServerOrderStatus();
@@ -25,5 +27,6 @@ public class ServerOrderStatus {
     public String account;
     public String ts;
     public int totalFilled;
-    public String open;
+    public boolean open;
+    public List<Fill> fills;
 }
